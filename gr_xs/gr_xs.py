@@ -24,7 +24,7 @@ Element = namedtuple('Element', 'orbitals wavefunctions')
 def build_orbitals(Z):
     ordering = Orbitals._fields
     max_e = {'s':2, 'p':6, 'd':10}
-    
+
     stable_orbitals = [0]*len(ordering)
     curr = 0
     while Z:
@@ -33,7 +33,7 @@ def build_orbitals(Z):
         curr += 1
 
     return Orbitals(*stable_orbitals)
-            
+
 
 def build_wfs(*args):
     lm2k2 = lambda k, mu: np.log(mu**2+k**2)
