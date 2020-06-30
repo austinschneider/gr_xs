@@ -11,7 +11,36 @@ GAMMAW = 2.085
 GAMMA0 = 2*ER*GAMMAW/MW
 ALPHA = 1/137.035999
 A0 = 1/(MELEC*ALPHA)
+HBC2 = 0.3893794 # GeV^2 mb
+GF = 0.0000116638 # GeV^-2
+GF2 = GF**2
+GFHBC2 = GF2*HBC2 # mb GeV^-2
+ME = MELEC
+MMU = 0.105658369
+GW = GAMMAW
 
+ME2 = ME**2
+MMU2 = MMU**2
+MW2 = MW**2
+GW2 = GW**2
+LDIFF = ME2-MMU2
+
+
+WSUM = MW2+GW2
+WPROD = MW*GW
+WPROD2 = MW2*GW2
+WRA2 = GW2/MW2
+
+d111 = LDIFF + MW2
+d112 = 2*LDIFF + MW2
+d11 = d111**2+d112*GW2
+d131 = LDIFF
+d1321 = LDIFF
+d1322 = WSUM
+d132 = d1321**2 + MW2*d1322
+
+e0 = 4*d131**2
+e1 = 2*MW*d11
 
 Wavefunctions = namedtuple('Wavefunctions',
                            'f1s f2s f2p f3s f3p f4s f3d')
@@ -64,17 +93,8 @@ ELEMENTS = Elements(
     Element(build_orbitals(20), build_wfs(19.5, 6.9, 8.0, 3.2, 2.9, 1.1, 0)),
     Element(build_orbitals(26), build_wfs(25.4, 9.3, 11.0, 4.6, 4.3, 1.4, 3.7)))
 
-
-def sigma_erest(enu):
-    """ At-rest electron. Eq. (3)
-    enu in GeV
-    """
-    _ = GAMMA0**2/4
-    return _/((enu-ER)**2+_)
-
-
 @np.vectorize
-def sigma_edopp(enu, element='O'):
+def sigma_ratio(enu, element='O'):
     """ Bound electron
     """
     elem = ELEMENTS.__getattribute__(element)
@@ -82,8 +102,62 @@ def sigma_edopp(enu, element='O'):
     F = lambda beta: np.sum([MELEC*ne*fk(beta*MELEC) for ne, fk in zip(elem.orbitals, elem.wavefunctions)])/Z
     integrand = lambda beta: F(beta)/beta*(
         np.arctan(2/GAMMA0*(enu*(1+beta)-ER))-np.arctan(2/GAMMA0*(enu*(1-beta)-ER)))
-    return GAMMA0/(4*enu)*quad(integrand, 0, 1)[0]
+    dopp = GAMMA0/(4*enu)*quad(integrand, 0, 1)[0]
 
+    _ = GAMMA0**2/4
+    rest = _/((enu-ER)**2+_)
+    return dopp/rest
+
+def sigma_erest(enu):
+    """ At-rest electron. Eq. (3)
+    enu in GeV
+    """
+
+    rest_mu_ratio = 5.02e-31 / 5.38e-32
+
+    c0 = 2*enu*ME
+    return GFHBC2 * (c0 + LDIFF)**2 / (3*c0*np.pi*((1-c0/MW2)**2+WRA2)) * rest_mu_ratio
+
+@np.vectorize
+def sigma_edopp(enu, element='O'):
+    return sigma_erest(enu)*sigma_ratio(enu, element=element)
+
+"""
+@np.vectorize
+def sigma_edopp(enu, element='O'):
+    "" Bound electron
+    ""
+    elem = ELEMENTS.__getattribute__(element)
+    Z = sum(elem.orbitals)
+    F = lambda beta: np.sum([MELEC*ne*fk(beta*MELEC) for ne, fk in zip(elem.orbitals, elem.wavefunctions)])/Z
+
+    c0 = 2*enu*ME
+    c1 = GFHBC2*MW2/(c0*GW*(WSUM))
+
+    def integrand(beta):
+        f = F(beta) / beta
+
+        d121 = WPROD/(MW2+c0*(beta-1)) #
+        d122 = WPROD/(-MW2+c0*(beta+1)) #
+        d12 = np.arctan(1/d121) + np.arctan(1/d122) #
+        d13311 = MW2 + c0*(beta-1) #
+        d1331 = d13311**2+WPROD2 #
+        d13321 = MW2 - c0*(beta+1) #
+        d1332 = d13321**2+WPROD2 #
+        d133 = np.log(d1331)-np.log(d1332) #
+        d13 = e0*np.arctanh(beta)+d132*d133 #
+        d1 = e1*d12+GW*d13 #
+        d = c1*d1/beta #
+
+        return f * d
+    return quad(integrand, 0, 1)[0]/(4.*np.pi)
+"""
+
+def sigma_hybrid(enu, element='O'):
+    if enu < 5e6 or enu > 8e6:
+        return sigma_erest(enu)
+    else:
+        return sigma_edopp(enu, element=element)
 
 if __name__=='__main__':
     for e, n in zip(ELEMENTS, ELEMENTS._fields):
